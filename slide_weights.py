@@ -6,7 +6,7 @@ import logging
 
 class SlideWeights:
     def __init__(self):
-        self.logger = logging.getLogger("Slide Types")
+        self.logger = logging.getLogger(__name__)
         self.logger.setLevel(logging.INFO)
 
         self.weights = {"Single GIF": 1,
@@ -72,7 +72,7 @@ class SlideWeights:
         :return: None
         """
 
-        self.weighted_list = self.weights.keys()
+        self.weighted_list = list(self.weights.keys())
         self.weighted_lookup = []
 
         for i in range(len(self.weighted_list)):
@@ -102,7 +102,7 @@ class SlideWeights:
 
         print("\nCurrent Weights:\n---------------------")
         for key in sorted(self.weights.keys()):
-            print("%s: %2.2f%%" % (key, 100.0*float(self.weights[key])/float(len(self.weighted_lookup))))
+            print("%s: %2.2f%%" % (key, 100.0 * self.weights[key] / len(self.weighted_lookup)))
 
     def choose_weighted(self):
         """
@@ -132,8 +132,6 @@ class SlideWeights:
             total_weights += self.weights[key]
 
         for key in sorted(self.weights.keys()):
-            weight_str += "  %s: %.2f%%\n" % (key, 100.0 * float(self.weights[key])/float(total_weights))
+            weight_str += "  %s: %.2f%%\n" % (key, 100.0 * self.weights[key] / total_weights)
 
         return weight_str
-
-
