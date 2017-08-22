@@ -1,22 +1,22 @@
 import os
-import re
 import wget
 import json
 import random
-import string
 import shutil
 import hashlib
 import unicodedata
 import datetime
 
-from urllib import FancyURLopener
-import urlparse
+import urllib
+import requests
+from bs4 import BeautifulSoup
+# import urlparse
 
-import urllib2
+# import urllib2
 import simplejson
 
-import Tkinter as tk
-import ttk
+import tkinter as tk
+from tkinter import ttk
 
 from pptx import Presentation
 from pptx.util import Inches, Pt
@@ -28,11 +28,6 @@ from slide_weights import SlideWeights
 from content_troll import Face
 
 from pymarkovchain import MarkovChain
-
-
-class MyOpener(FancyURLopener, object):
-    version = "Mozilla/5.0 (Linux; U; Android 4.0.3; ko-kr; LG-L160L Build/IML74K) AppleWebkit/534.30 (KHTML, like Gecko) Version/4.0 Mobile Safari/534.30"
-
 
 class Trollette:
     def __init__(self):
@@ -49,23 +44,18 @@ class Trollette:
         with open("terms.json", "r") as f:
             self.terms = json.load(f)
 
-        with open(os.path.join("GIFs", "hashes.json"), "r") as f:
+        with open(os.path.join("gifs", "hashes.json"), "r") as f:
             self.gifs = json.load(f)
 
-        with open(os.path.join("Images", "hashes.json"), "r") as f:
+        with open(os.path.join("images", "hashes.json"), "r") as f:
             self.images = json.load(f)
 
         # Load up the proverb data
-        with open(os.path.join("Proverbs", "facts"), "r") as f:
+        with open(os.path.join("proverbs", "facts"), "r") as f:
             self.proverb_lines = f.readlines()
-        self.proverbs = map(string.strip, self.proverb_lines)
+        self.proverbs = [x.strip() for x in self.proverb_lines]
         self.proverb_markov = MarkovChain("markov.db")
         self.proverb_markov.generateDatabase("".join(self.proverb_lines), n=1)
-
-        # Make the text data
-        # self.my_face = comptroller.face(self.title)
-        # self.slide_titles = self.my_face.get_titles(50)
-        # self.slide_bullets = self.my_face.get_bullets(100)
 
         self.my_face = Face("")
 
@@ -77,45 +67,31 @@ class Trollette:
 
     def generate_slide_deck(self):
         # Create a place to put data and resources
-        self.output_dir = os.path.join("Output", "%s_%s_%s" % (self.title,
-                                                               self.presenter,
-                                                               datetime.datetime.strftime(datetime.datetime.now(), '%Y_%m_%d_%H_%M_%S')))
+        self.output_dir = os.path.join("output", "{}_{}_{}".format(
+            self.title,
+            self.presenter,
+            datetime.datetime.strftime(datetime.datetime.now(), '%Y_%m_%d_%H_%M_%S')))
 
-        self.resources_dir = os.path.join(self.output_dir, "Resources")
+        self.resources_dir = os.path.join(self.output_dir, "resources")
 
         # Start with a fresh PowerPoint
         self.ppt = Presentation()
 
         # Make sure the directories exist
-        try:
-            os.makedirs(self.output_dir)
-            os.makedirs(self.resources_dir)
-        except:
-            self.log("Directory %s already exists, overwriting..." % self.output_dir)
+        os.makedirs(self.output_dir, exist_ok=True)
+        os.makedirs(self.resources_dir, exist_ok=True)
 
         self.slide_count = random.randint(self.slide_min, self.slide_max)
         self.log("Generating a slide deck of %d slides about %s" % (self.slide_count, self.title))
 
-        try:
-            self.log("Getting slide content...")
-            self.my_face.set_topic(self.title)
+        self.log("Getting slide content...")
+        self.my_face.set_topic(self.title)
 
-            self.log("Generating slide titles...")
-            self.slide_titles = self.my_face.get_titles(self.slide_count)
+        self.log("Generating slide titles...")
+        self.slide_titles = self.my_face.get_titles(self.slide_count)
 
-            self.log("Generating slide bullets...")
-            self.slide_bullets = self.my_face.get_bullets(self.slide_count*3)
-        except:
-            self.log("Problem generating content for a talk on %s, exiting..." % self.title)
-            return
-
-        #self.farm_gif_term(self.title)
-        #sp = self.title.split(" ")
-        #if len(sp) > 1:
-        #    for i in range(len(sp)):
-        #        if len(sp[i]) > 5:
-        #            self.farm_gif_term(sp[i])
-        #self.farm_image_term(self.title)
+        self.log("Generating slide bullets...")
+        self.slide_bullets = self.my_face.get_bullets(self.slide_count * 3)
 
         self.log_slide_weights()
 
@@ -140,21 +116,20 @@ class Trollette:
         for i in range(self.slide_count):
             choice = self.slide_weights.choose_weighted()
 
-            self.log("  Generating slide #%d: %s" % (i+1, choice))
+            self.log("  Generating slide #%d: %s" % (i + 1, choice))
 
-            new_slide_layout = None
             if choice == "Single GIF":
-                ns = self.create_gif_slide(random.choice(self.slide_titles), self.get_giphy_search_term(), i)
+                self.create_gif_slide(random.choice(self.slide_titles), self.get_giphy_search_term(), i)
             elif choice == "Full Slide GIF":
-                ns = self.create_full_gif_slide(self.get_giphy_search_term(), i)
+                self.create_full_gif_slide(self.get_giphy_search_term(), i)
             elif choice == "Single Image":
-                ns = self.create_image_slide(random.choice(self.slide_titles), self.get_image_search_term(), i)
+                self.create_image_slide(random.choice(self.slide_titles), self.get_image_search_term(), i)
             elif choice == "Full Slide Image":
-                ns = self.create_full_image_slide(self.get_image_search_term(), i)
+                self.create_full_image_slide(self.get_image_search_term(), i)
             elif choice == "Information":
-                ns = self.create_info_slide(i)
+                self.create_info_slide(i)
             elif choice == "Quotation":
-                ns = self.create_quote_slide()
+                self.create_quote_slide()
 
     def create_single_full_image_slide(self, image_path):
         blank_slide_layout = self.ppt.slide_layouts[6]
@@ -164,7 +139,7 @@ class Trollette:
         top = Inches(0)
         height = Inches(8)
         width = Inches(10)
-        pic = new_slide.shapes.add_picture(image_path, left, top, height=height, width=width)
+        new_slide.shapes.add_picture(image_path, left, top, height=height, width=width)
         return new_slide
 
     def create_single_image_slide(self, slide_title, image_path):
@@ -183,14 +158,14 @@ class Trollette:
         top = Inches(1)
         height = Inches(6)
         width = Inches(8)
-        pic = new_slide.shapes.add_picture(image_path, left, top, height=height, width=width)
+        new_slide.shapes.add_picture(image_path, left, top, height=height, width=width)
 
         return new_slide
 
     def download_gif(self, term, slide_num):
         # If we have at least 3 local gifs, use one of those
         if (term in self.gifs) and (len(self.gifs[term]) > 3):
-            return os.path.join("GIFs", "%s.gif" % random.choice(self.gifs[term]))
+            return os.path.join("gifs", "%s.gif" % random.choice(self.gifs[term]))
 
         try:
             # Download the gif
@@ -208,8 +183,8 @@ class Trollette:
 
             if not (file_md5 in self.gifs[term]):
                 self.gifs[term].append(file_md5)
-                shutil.copy(image_path, os.path.join("GIFs", "%s.gif" % file_md5))
-                with open(os.path.join("GIFs", "hashes.json"), "w") as f:
+                shutil.copy(image_path, os.path.join("gifs", "%s.gif" % file_md5))
+                with open(os.path.join("gifs", "hashes.json"), "w") as f:
                     json.dump(self.gifs, f, indent=2)
 
             return image_path
@@ -219,7 +194,7 @@ class Trollette:
     def download_image(self, term, slide_num):
         # If we have at least 3 local images, use one of those
         if (term in self.images) and (len(self.images[term]) > 3):
-            return os.path.join("Images", "%s.img" % random.choice(self.images[term]))
+            return os.path.join("images", "%s.img" % random.choice(self.images[term]))
 
         try:
             search_term = term
@@ -231,13 +206,14 @@ class Trollette:
             image_path = ""
             while download_attempts < 10:
 
-                fetcher = urllib2.build_opener()
+                fetcher = urllib.build_opener()
                 start_index = random.randint(0, 50)
                 search_url = "http://ajax.googleapis.com/ajax/services/search/images?v=1.0&q=%s&start=%s" % (search_term, str(start_index))
                 f = fetcher.open(search_url)
                 deserialized_output = simplejson.load(f)
 
-                image_url = deserialized_output['responseData']['results'][random.randint(0, len(deserialized_output['responseData']['results'])-1)]['unescapedUrl']
+                rnum = random.randrange(len(deserialized_output['responseData']['results'] - 1))
+                image_url = deserialized_output['responseData']['results'][rnum]['unescapedUrl']
                 image_path = os.path.join(self.resources_dir, "%d.img" % slide_num)
                 wget.download(image_url, image_path)
 
@@ -262,8 +238,8 @@ class Trollette:
 
             if not (file_md5 in self.images[term]):
                 self.images[term].append(file_md5)
-                shutil.copy(image_path, os.path.join("Images", "%s.img" % file_md5))
-                with open(os.path.join("Images", "hashes.json"), "w") as f:
+                shutil.copy(image_path, os.path.join("images", "%s.img" % file_md5))
+                with open(os.path.join("images", "hashes.json"), "w") as f:
                     json.dump(self.images, f, indent=2)
 
             return image_path
@@ -319,7 +295,7 @@ class Trollette:
         tf = body_shape.text_frame
         for b in sb:
             p = tf.add_paragraph()
-            #p.text = b
+            # p.text = b
 
             p.alignment = PP_PARAGRAPH_ALIGNMENT.LEFT
             run1 = p.add_run()
@@ -348,9 +324,9 @@ class Trollette:
                 if tries < 10:
                     left = Inches(5.5)
                     top = Inches(3)
-                    #height = Inches(3)
+                    # height = Inches(3)
                     width = Inches(3)
-                    pic = new_slide.shapes.add_picture(image_path, left, top, width=width)
+                    new_slide.shapes.add_picture(image_path, left, top, width=width)
                     break
                 attempts += 1
 
@@ -362,15 +338,15 @@ class Trollette:
     def create_quote_slide(self):
         # Pick a random quote category and quote
         cat = random.choice(self.terms["quote_categories"])
-        with open(os.path.join("Quotes", "quotes_%s.json" % cat)) as f:
+        with open(os.path.join("quotes", "quotes_%s.json" % cat)) as f:
             q1 = random.choice(json.load(f))
 
         cat = random.choice(self.terms["quote_categories"])
-        with open(os.path.join("Quotes", "quotes_%s.json" % cat)) as f:
+        with open(os.path.join("quotes", "quotes_%s.json" % cat)) as f:
             q2 = random.choice(json.load(f))
 
         quote_text = "\"%s\"" % q1["quote"]
-        if (random.randint(0,100) % 5) == 0:
+        if (random.randint(0, 100) % 5) == 0:
             quote_text = random.choice(self.proverbs)
 
         quote_author = "- %s" % q2["name"]
@@ -472,6 +448,10 @@ class Trollette:
         return file_hasher.hexdigest()
 
     def farm_image_term(self, term, amount=25, threshold=10):
+        path = 'https://www.google.pt/search?q=%s&source=lnms&tbm=isch&sa=X&tbs=isz:l&tbm=isch'
+        user_agent = 'Mozilla/5.0 (Linux; U; Android 4.0.3; ko-kr; LG-L160L Build/IML74K)' \
+            ' AppleWebkit/534.30 (KHTML, like Gecko) Version/4.0 Mobile Safari/534.30'
+
         self.log("Farming images for %s..." % term)
 
         if not (term in self.images):
@@ -479,30 +459,26 @@ class Trollette:
 
         attempt_count = 0
         while (attempt_count < threshold) and (len(self.images[term]) < amount):
-            myopener = MyOpener()
-            page = myopener.open('https://www.google.pt/search?q=%s&source=lnms&tbm=isch&sa=X&tbs=isz:l&tbm=isch' % term.replace(" ", "+"))
-            html = page.read()
-
-            for match in re.finditer(r'<a href="/imgres\?imgurl=(.*?)&amp;imgrefurl', html, re.IGNORECASE | re.DOTALL | re.MULTILINE):
+            res = requests.get(path % term.replace(" ", "+"),
+                    headers=dict(requests.utils.default_headers(), **{'User-Agent': user_agent}))
+            bs = BeautifulSoup(res.content, 'lxml')
+            for img in bs.find_all('div', {'class': 'rg_meta'}):
                 if len(self.images[term]) >= amount:
                     break
 
-                try:
-                    os.remove("test.img")
-                except:
-                    pass
+                imgdesc = json.loads(img.string)
+                imgurl = imgdesc['ou']
 
                 try:
-                    path = urlparse.urlsplit(match.group(1)).path
-                    self.log("  Downloading %s" % match.group(1))
-                    myopener.retrieve(match.group(1), "test.img")
+                    self.log("  Downloading {}".format(imgurl))
+                    image = requests.get(imgurl).content
 
-                    image_md5 = self.get_file_md5("test.img")
+                    image_md5 = hashlib.md5(image).hexdigest()
 
                     if not (image_md5 in self.images[term]):
                         self.images[term].append(image_md5)
-                        shutil.copy("test.img", os.path.join("Images", "%s.img" % image_md5))
-                        os.remove("test.img")
+                        with open(os.path.join('images', '{}.img'.format(image_md5)), 'wb') as f:
+                            f.write(image)
                         self.log("    Image saved to archive. %d/%d images." % (len(self.images[term]), amount))
                         attempt_count = 0
                     else:
@@ -514,7 +490,7 @@ class Trollette:
 
         self.log("Farming of %s images complete, now holding %d images" % (term, len(self.images[term])))
 
-        with open(os.path.join("Images", "hashes.json"), "w") as f:
+        with open(os.path.join("images", "hashes.json"), "w") as f:
             json.dump(self.images, f, indent=2)
 
     def farm_images(self, amount=25, threshold=10):
@@ -549,7 +525,7 @@ class Trollette:
 
                 if not (image_md5 in self.gifs[term]):
                     self.gifs[term].append(image_md5)
-                    shutil.copy(image_path, os.path.join("GIFs", "%s.gif" % image_md5))
+                    shutil.copy(image_path, os.path.join("gifs", "%s.gif" % image_md5))
                     self.log("    GIF saved to archive. %d/%d GIFs." % (len(self.gifs[term]), amount))
                     attempt_count = 0
                 else:
@@ -561,7 +537,7 @@ class Trollette:
 
         self.log("Farming of %s GIFs complete, now holding %d GIFs" % (term, len(self.gifs[term])))
 
-        with open(os.path.join("GIFs", "hashes.json"), "w") as f:
+        with open(os.path.join("gifs", "hashes.json"), "w") as f:
             json.dump(self.gifs, f, indent=2)
 
     def farm_gifs(self, amount=25, threshold=10):
@@ -581,7 +557,7 @@ class Trollette:
 
     def farm_content(self, all_content):
         for talk_title in self.terms["talk_titles"]:
-            talk_path = os.path.join("Content", "%s.txt" % talk_title)
+            talk_path = os.path.join("content", "%s.txt" % talk_title)
             # Either we're replacing all content or we're only replacing files that don't exist
             if all_content or (not os.path.exists(talk_path)):
                 self.log("Farming data on %s..." % talk_title)
@@ -667,11 +643,11 @@ class TrolletteApp(tk.Frame):
         self.show_gif_button = tk.Button(master, text='Show GIF Search Terms', command=self.show_gif_terms)
         self.show_gif_button.grid(row=r, columnspan=2)
         self.add_gif_entry = tk.Entry(master)
-        self.add_gif_entry.grid(row=r+1, columnspan=2)
+        self.add_gif_entry.grid(row=r + 1, columnspan=2)
         self.add_gif_button = tk.Button(master, text='Add GIF Term', command=self.add_gif_term)
-        self.add_gif_button.grid(row=r+2, column=0)
+        self.add_gif_button.grid(row=r + 2, column=0)
         self.delete_gif_button = tk.Button(master, text='Delete GIF Term', command=self.delete_gif_term)
-        self.delete_gif_button.grid(row=r+2, column=1)
+        self.delete_gif_button.grid(row=r + 2, column=1)
         r += 3
 
         ttk.Separator(master, orient=tk.HORIZONTAL).grid(row=r, columnspan=2, sticky="ew")
@@ -680,11 +656,11 @@ class TrolletteApp(tk.Frame):
         self.show_image_button = tk.Button(master, text='Show Image Search Terms', command=self.show_image_terms)
         self.show_image_button.grid(row=r, columnspan=2)
         self.add_image_entry = tk.Entry(master)
-        self.add_image_entry.grid(row=r+1, columnspan=2)
+        self.add_image_entry.grid(row=r + 1, columnspan=2)
         self.add_image_button = tk.Button(master, text='Add Image Term', command=self.add_image_term)
-        self.add_image_button.grid(row=r+2, column=0)
+        self.add_image_button.grid(row=r + 2, column=0)
         self.delete_image_button = tk.Button(master, text='Delete Image Term', command=self.delete_image_term)
-        self.delete_image_button.grid(row=r+2, column=1)
+        self.delete_image_button.grid(row=r + 2, column=1)
         r += 3
 
         ttk.Separator(master, orient=tk.HORIZONTAL).grid(row=r, columnspan=2, sticky="ew")
@@ -713,7 +689,7 @@ class TrolletteApp(tk.Frame):
 
         # Create the output window
         self.trollette_output = tk.Text(master, bd=4, state=tk.DISABLED, width=80, height=40)
-        self.trollette_output.config(font=("courier new", 14), background="black", foreground="green")
+        self.trollette_output.config(font=("FreeMono", 14), background="black", foreground="green")
         self.trollette_output.grid(row=0, rowspan=r, column=2)
 
         self.trollette_output_scroll = tk.Scrollbar(master, command=self.trollette_output.yview)
@@ -797,7 +773,7 @@ class TrolletteGUI(tk.Frame):
         self.style = ttk.Style()
         self.create_styles()
 
-        ### CREATE ALL THE PANES
+        # CREATE ALL THE PANES
 
         # Main Window Pane
 
@@ -820,7 +796,7 @@ class TrolletteGUI(tk.Frame):
         self.pane_main.add(self.pane_bottom)
 
         self.trollette_output = tk.Text(self.pane_bottom, bd=4, state=tk.DISABLED, width=80, height=40)
-        self.trollette_output.config(font=("courier new", 16), background="black", foreground="green")
+        self.trollette_output.config(font=("FreeMono", 16), background="black", foreground="green")
         self.trollette_output.pack(fill=tk.BOTH, expand=1)
         self.trollette_output.grid(row=0, column=0)
         self.troll.console = self.trollette_output
@@ -828,7 +804,7 @@ class TrolletteGUI(tk.Frame):
 
         self.trollette_output_scroll = ttk.Scrollbar(self.trollette_output, command=self.trollette_output.yview)
         self.trollette_output['yscrollcommand'] = self.trollette_output_scroll.set
-        #self.pane_bottom.add(self.trollette_output_scroll)
+        # self.pane_bottom.add(self.trollette_output_scroll)
 
         # Create the Notebook for Options
         self.notebook = ttk.Notebook(self.pane_top)
@@ -859,7 +835,7 @@ class TrolletteGUI(tk.Frame):
         self.slide_count_max_entry.grid(row=2, column=3)
         self.slide_count_max_entry.insert(0, str(self.troll.slide_max))
 
-        self.image_trollerate = tk.PhotoImage(file=os.path.join("Resources", "trollerate.gif"), width=300, height=280)
+        self.image_trollerate = tk.PhotoImage(file=os.path.join("resources", "trollerate.gif"), width=300, height=280)
         self.go_button = ttk.Button(self.pane_trollerate, command=self.generate_troll, image=self.image_trollerate, style="Troll.TButton")
 
         self.go_button.grid(row=3, column=0, columnspan=4)
@@ -922,18 +898,16 @@ class TrolletteGUI(tk.Frame):
         self.farm_all_content_button = ttk.Button(self.frame_farming, text='Farm All Content', command=self.farm_all_content)
         self.farm_all_content_button.grid(row=3, column=0)
 
-
     def create_styles(self):
         self.style.configure("Troll.TButton", bd=0)
-        self.style.configure("TPanedWindow", font="courier 20", background="black")
-        self.style.configure("TText", font="courier 20", background="black")
-        self.style.configure("TScale", font="courier 20", background="black")
-        self.style.configure("TEntry", font="courier 20")
-        self.style.configure("TLabel", font="courier 20", background="black")
-        self.style.configure("TOptionMenu", font="courier 20", background="black")
-        self.style.configure("TNotebook", font="courier 20", background="black")
+        # self.style.configure("TPanedWindow", font="FreeMono 20", background="black")
+        # self.style.configure("TText", font="FreeMono 20", background="black")
+        # self.style.configure("TScale", font="FreeMono 20", background="black")
+        # self.style.configure("TEntry", font="FreeMono 20")
+        # self.style.configure("TLabel", font="FreeMono 20", background="black")
+        # self.style.configure("TOptionMenu", font="FreeMono 20", background="black")
+        # self.style.configure("TNotebook", font="FreeMono 20", background="black")
         self.style.configure("TSeparator", padding=20)
-
 
     def show_gif_terms(self):
         self.troll.log("GIF Search Terms:\n%s" % json.dumps(self.troll.terms["giphy_searches"], indent=4))
@@ -1003,7 +977,8 @@ def main():
     app = TrolletteGUI(tk.Tk())
     app.run()
 
-if __name__ == "__main__":
+
+if __name__ == '__main__':
     main()
 
 __author__ = 'wartortell'

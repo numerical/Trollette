@@ -2,9 +2,8 @@
 # Requires wikipedia.py, wiki2plain.py, and python yaml
 import wikipedia
 import os
-import sys
 import unicodedata
-from random import randint as rand
+import random
 
 
 class Face:
@@ -17,7 +16,7 @@ class Face:
 
     def set_topic(self, new_topic):
         self.topic = new_topic
-        topic_path = os.path.join("Content", "%s.txt" % new_topic)
+        topic_path = os.path.join("content", "{}.txt".format(new_topic))
         if os.path.exists(topic_path):
             with open(topic_path, "r") as f:
                 self.content = f.read()
@@ -25,60 +24,25 @@ class Face:
             self.content = self.get_text()
 
     def get_text(self):
+        print('get_text: {}'.format(self.topic))
+        assert self.topic
+        queries = [self.topic, self.topic[:len(self.topic) // 2]]
+        tokens = self.topic.split()
+        if len(tokens) > 1:
+            queries.append(tokens[0])
+            queries.append(tokens[-1])
 
+        topic_results = list()
+        for query in queries:
+            topic_results.extend(wikipedia.search(query))
+        print('topic_results size:', len(topic_results))
         try:
-            # do a wikipedia search for the topic
             topic_results = wikipedia.search(self.topic)
-
-            # pick one of the results and grab the content
-            self.content += wikipedia.page(topic_results[rand(0, len(topic_results) - 1)]).content
-
-            # DO IT MORE
-            more_content = wikipedia.page(topic_results[rand(0, len(topic_results) - 1)]).content
-            if more_content not in self.content:
-                self.content += more_content
-            more_content = wikipedia.page(topic_results[rand(0, len(topic_results) - 1)]).content
-            if more_content not in self.content:
-                self.content += more_content
-            more_content = wikipedia.page(topic_results[rand(0, len(topic_results) - 1)]).content
-        except wikipedia.exceptions.DisambiguationError as e:
+            for query in random.sample(topic_results, 9):
+                self.content += wikipedia.page(query).content
+        except wikipedia.exceptions.DisambiguationError:
             self.content += self.topic + ' can mean many things but to me it is'
-        except wikipedia.exceptions.PageError as e:
-            self.content += self.topic + ' is sometimes hard to find'
-
-        # if there are more than one word in the topic try to get some more results with the first and last word
-        if len(self.topic.split()) > 1:
-            try:
-                # get more results with less of the topic for some ambiguity
-                topic_results = wikipedia.search(self.topic.split()[:1])
-                self.content += wikipedia.page(topic_results[rand(0, len(topic_results) - 1)]).content
-                more_content = wikipedia.page(topic_results[rand(0, len(topic_results) - 1)]).content
-                if more_content not in self.content:
-                    self.content += more_content
-            except wikipedia.exceptions.DisambiguationError as e:
-                self.content += self.topic + ' can mean many things but to me it is'
-            except wikipedia.exceptions.PageError as e:
-                self.content += self.topic + ' is sometimes hard to find'
-            try:
-                # get even more with the second half of the topic for wierd results maybe
-                topic_results = wikipedia.search(self.topic.split()[-1:])
-                self.content += wikipedia.page(topic_results[rand(0, len(topic_results) - 1)]).content
-                more_content = wikipedia.page(topic_results[rand(0, len(topic_results) - 1)]).content
-                if more_content not in self.content:
-                    self.content += more_content
-            except wikipedia.exceptions.DisambiguationError as e:
-                self.content += self.topic + ' can mean many things but to me it is'
-            except wikipedia.exceptions.PageError as e:
-                self.content += self.topic + ' is sometimes hard to find'
-        try:
-            # do a wikipedia search for the topic
-            topic_results = wikipedia.search(self.topic[:len(self.topic) / 2])
-
-            # pick one of the results and grab the self.content
-            self.content += wikipedia.page(topic_results[rand(0, len(topic_results) - 1)]).content
-        except wikipedia.exceptions.DisambiguationError as e:
-            self.content += self.topic + ' can mean many things but to me it is'
-        except wikipedia.exceptions.PageError as e:
+        except wikipedia.exceptions.PageError:
             self.content += self.topic + ' is sometimes hard to find'
         return self.content
 
@@ -106,14 +70,6 @@ class Face:
 
         content += self.research_topic(topic, logger)
 
-        #except wikipedia.exceptions.DisambiguationError as e:
-        #    self.content += topic + ' can mean many things but to me it is'
-        #except wikipedia.exceptions.PageError as e:
-        #    self.content += topic + ' is sometimes hard to find'
-        #except Exception as e:
-        #    print e
-
-        # if there are more than one word in the topic try to get some more results with the first and last word
         topic_split = topic.split()
         if len(topic_split) > 1:
             for i in range(len(topic_split)):
@@ -124,9 +80,9 @@ class Face:
 
                     content += self.research_topic(topic_split[i], logger)
 
-                except wikipedia.exceptions.DisambiguationError as e:
+                except wikipedia.exceptions.DisambiguationError:
                     content += topic + ' can mean many things but to me it is'
-                except wikipedia.exceptions.PageError as e:
+                except wikipedia.exceptions.PageError:
                     content += topic + ' is sometimes hard to find'
 
         return content
@@ -136,12 +92,12 @@ class Face:
         words = self.content.split()
         # function to take a blob and parse out apropriately sized snippets
         for index in range(0, len(words) - 1):
-            if self.topic.lower()[:len(self.topic) / 4] in words[index].lower() or self.topic.split()[-1].lower() in \
+            if self.topic.lower()[:len(self.topic) // 4] in words[index].lower() or self.topic.split()[-1].lower() in \
                     words[index].lower():
                 cur_word = words[index]
                 phrase = ''
                 if index > 5:
-                    i = index - rand(0, 5)
+                    i = index - random.randint(0, 5)
                 else:
                     i = index
                 counter = 0
@@ -159,11 +115,13 @@ class Face:
                         if char.isalpha() or char.isspace():
                             temp += char
                     phrase = temp
-                    other_words = ['using only my', 'forever!', 'because', 'for once in your life', 'until',
-                                   'Great Job!', ', but in reality', 'is wrong!', 'is #1', 'never dies', 'is really',
-                                   'might be', 'or not', 'better known as', 'the worst', 'kinda feels like', ', right?',
-                                   '', ', WTF!', ', for realz', ', tru fact', 'in the feels','probably the best','?']
-                    phrase += other_words[rand(0, len(other_words) - 1)]
+                    other_words = [
+                            'using only my', 'forever!', 'because', 'for once in your life', 'until',
+                            'Great Job!', ', but in reality', 'is wrong!', 'is #1', 'never dies', 'is really',
+                            'might be', 'or not', 'better known as', 'the worst', 'kinda feels like',
+                            ', right?', '', ', WTF!', ', for realz', ', tru fact', 'in the feels',
+                            'probably the best', '?']
+                    phrase += random.choice(other_words)
                     phrases.append(phrase)
         phrases = list(set(phrases))
         return phrases
@@ -172,7 +130,7 @@ class Face:
         bullets = []
         sentences = self.content.split('.')
         for ea in sentences:
-            if len(ea) in range(50,75) and "\n" not in ea and "=" not in ea:
+            if len(ea) in range(50, 75) and "\n" not in ea and "=" not in ea:
                 bullets.append(ea)
         return bullets
 
