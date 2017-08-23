@@ -137,7 +137,6 @@ class Face:
     def get_bullets(self, min_count):
         final_bullets = []
         while len(final_bullets) < min_count:
-            self.content += self.get_text()
             bullets = self.parse_bullets()
             for b in bullets:
                 final_bullets.append(b.strip())
@@ -147,7 +146,6 @@ class Face:
         # function to choose short headlines for the top of slides
         headlines = []
         while len(headlines) < min_count:
-            self.content += self.get_text()
             phrases = self.parse_text()
             for p in phrases:
                 headlines.append(p.strip())
